@@ -1,0 +1,16 @@
+[Unit]
+Description=AI Vision Rover - Camera Stream Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/ai-vision-rover/server
+Environment=CAMERA_INDEX=5
+ExecStart=/usr/bin/python3 /root/ai-vision-rover/server/main.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
