@@ -1,6 +1,8 @@
 import asyncio
 import base64
+import json
 import os
+import time
 from contextlib import asynccontextmanager
 
 import cv2
@@ -8,7 +10,10 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
+import motor_control
+
 CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "5"))
+CONTROL_TIMEOUT = 0.5  # seconds. No command in this window → motors stop.
 
 camera = None
 
@@ -51,10 +56,29 @@ async def broadcast_frames():
         await asyncio.sleep(1 / 30)
 
 
+active_control_ws: WebSocket | None = None
+last_cmd_time: float = 0.0
+
+
+async def control_watchdog():
+    """Stops motors if no command arrives within CONTROL_TIMEOUT."""
+    while True:
+        await asyncio.sleep(0.1)
+        if active_control_ws is None:
+            continue
+        if time.monotonic() - last_cmd_time > CONTROL_TIMEOUT:
+            motor_control.parar()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    motor_control.setup()
     asyncio.create_task(broadcast_frames())
-    yield
+    asyncio.create_task(control_watchdog())
+    try:
+        yield
+    finally:
+        motor_control.parar()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -71,6 +95,51 @@ async def camera_ws(websocket: WebSocket):
     except WebSocketDisconnect:
         connected_clients.remove(websocket)
         print(f"Client disconnected. Total: {len(connected_clients)}")
+
+
+@app.websocket("/ws/control")
+async def control_ws(websocket: WebSocket):
+    global active_control_ws, last_cmd_time
+    await websocket.accept()
+
+    # Displace any existing controller — only one operator at a time.
+    if active_control_ws is not None:
+        try:
+            await active_control_ws.close(code=1000, reason="displaced by new controller")
+        except Exception:
+            pass
+        motor_control.parar()
+
+    active_control_ws = websocket
+    last_cmd_time = time.monotonic()
+    print("Control client connected")
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            if msg.get("stop"):
+                motor_control.parar()
+                last_cmd_time = time.monotonic()
+                continue
+
+            left = max(-1.0, min(1.0, float(msg.get("left", 0))))
+            right = max(-1.0, min(1.0, float(msg.get("right", 0))))
+            motor_control.set_speeds(left, right)
+            last_cmd_time = time.monotonic()
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"Control error: {e}")
+    finally:
+        motor_control.parar()
+        if active_control_ws is websocket:
+            active_control_ws = None
+        print("Control client disconnected")
 
 
 app.mount("/", StaticFiles(directory="../static", html=True), name="static")
