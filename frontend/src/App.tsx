@@ -119,9 +119,6 @@ export default function App() {
         addLog('Control channel closed — retrying in 2s', 'err')
         reconnectTimer = window.setTimeout(openControl, 2000)
       }
-      ws.onerror = () => {
-        // onclose fires after this, handles retry
-      }
     }
 
     openControl()
@@ -193,9 +190,6 @@ export default function App() {
       wsRef.current?.close()
     }
   }, [addLog])
-
-  const gamepadWarning = !gamepadName
-  const controlWarning = !controlConnected
 
   return (
     <>
@@ -274,10 +268,10 @@ export default function App() {
 
           <div className="panel-section">
             <div className="section-label">Control</div>
-            {(gamepadWarning || controlWarning) && (
+            {(!gamepadName || !controlConnected) && (
               <div className="log-err" style={{ marginBottom: 8 }}>
-                {controlWarning && '⚠ Control channel down. '}
-                {gamepadWarning && '⚠ No gamepad detected. '}
+                {!controlConnected && '⚠ Control channel down. '}
+                {!gamepadName && '⚠ No gamepad detected. '}
               </div>
             )}
             <div className="stat-row">
