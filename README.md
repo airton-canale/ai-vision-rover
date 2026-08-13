@@ -110,7 +110,71 @@ Open `http://<orange_pi_ip>:8000` and click **Connect**.
 
 ---
 
+## Gamepad control (DualShock 4)
+
+The rover drives from a DS4 gamepad plugged into the **operator's laptop**, not the Pi. Inputs are polled in the browser (Gamepad API) and sent over WebSocket `/ws/control` at ~15 Hz.
+
+### Wiring (L298N HW-095 → Orange Pi)
+
+| L298N | Physical pin | Side |
+|---|---|---|
+| IN1 | 11 | left motors |
+| IN2 | 13 | left motors |
+| IN3 | 15 | right motors |
+| IN4 | 22 | right motors |
+
+Both motors per side are ganged to one channel. If a side spins the wrong way, swap the two motor wires on that channel of the L298N.
+
+### Connecting the controller
+
+1. Plug DS4 into the laptop via USB (or pair over Bluetooth to the laptop — **not** the Pi).
+2. Open the Mission Control page in Chrome or Edge (best Gamepad API support).
+3. Press any button on the DS4 once — browsers only expose the pad after first input.
+4. The **GAMEPAD** pill in the header turns green and its name appears in the Control panel.
+
+### Button map
+
+| Input | Action |
+|---|---|
+| Left stick Y | Throttle (forward / reverse) |
+| Right stick X | Steering |
+| Circle (button 1) | Emergency stop |
+
+Deadzone is 0.15 on both axes. Throttle + steering are mixed into left/right track speeds (arcade drive), clamped to [-1, 1].
+
+### Hardware limitation: no PWM speed control (yet)
+
+The HW-095's **ENA/ENB pins are jumpered HIGH**, so `IN1`–`IN4` are digital-only. Motors run at full speed or stopped — no proportional control. In software the whole pipeline uses floats in [-1, 1]; only the last hop (`_apply_side` in `motor_control.py`) thresholds to bang-bang. Anything with magnitude ≥ 0.3 drives full-on.
+
+To enable true PWM: remove the ENA/ENB jumpers, wire them to two PWM-capable GPIOs, and replace the body of `_apply_side`. Nothing else in the pipeline needs to change.
+
+### Server-side safety
+
+- Watchdog stops motors if no command arrives in 500 ms (network drop, tab closed).
+- Only one control WebSocket is active at a time — a new connection displaces the old one.
+- Motors stop on disconnect, shutdown, or any control-loop exception.
+- Values are clamped server-side; client input is not trusted.
+
+### Testing without the Pi (dev on laptop)
+
+```bash
+cd server
+MOCK_GPIO=1 python3 main.py
+```
+
+`MOCK_GPIO=1` replaces the `gpio` subprocess calls with logged pin writes, so the whole WebSocket + mixing pipeline can be exercised on a laptop without wiringOP installed.
+
+Manual motor sanity check on the Pi:
+
+```bash
+cd server
+python3 motor_control.py teste
+```
+
+---
+
 ## Notes
 
 - Camera index is set via the `CAMERA_INDEX` env var in `rover-cam.service` (defaults to `5`, matched to our Logitech C270 on `/dev/video5`). Adjust if your camera enumerates differently — check with `v4l2-ctl --list-devices`.
 - `opencv-python` is intentionally excluded from `requirements.txt` — install `python3-opencv` via `apt` on the Orange Pi instead, to avoid a numpy version conflict with the system package.
+- No new Python deps for gamepad control — FastAPI already provides WebSocket support and `motor_control.py` uses stdlib `subprocess`.
