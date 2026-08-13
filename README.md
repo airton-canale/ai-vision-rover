@@ -1,4 +1,4 @@
-# 🤖 AI Vision Rover
+# AI Vision Rover
 
 Raspberry-Pi-style rover project running on an **Orange Pi 4 LTS**, streaming camera feed to a **Mission Control** web dashboard, with CI/CD auto-deploy via GitHub Actions + Tailscale.
 
@@ -6,20 +6,19 @@ Raspberry-Pi-style rover project running on an **Orange Pi 4 LTS**, streaming ca
 
 ```
 ai-vision-rover/
-├── .github/workflows/
-│   └── deploy.yml         # CI/CD pipeline
+├── .github/workflows/deploy.yml
 ├── server/
-│   ├── main.py            # FastAPI camera server
+│   ├── main.py
 │   └── requirements.txt
-├── frontend/              # Vite + React + TS dashboard (source)
+├── frontend/
 │   ├── src/
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.ts
-├── static/                # Vite build output (gitignored, served by FastAPI)
+├── static/
 ├── deploy/
-│   ├── deploy.sh          # Runs on Orange Pi via SSH
-│   └── rover-cam.service  # systemd unit (auto-start on boot)
+│   ├── deploy.sh
+│   └── rover-cam.service
 └── README.md
 ```
 
@@ -42,7 +41,7 @@ npm run build   # outputs to ../static
 
 ---
 
-## 🚀 CI/CD Setup (one-time)
+## CI/CD Setup (one-time)
 
 ### 1. Install Tailscale on the Orange Pi
 
@@ -98,7 +97,7 @@ Every merge to `main` (or a manual "Run workflow" click in the Actions tab) will
 
 ---
 
-## 🖥️ Manual run (without CI/CD)
+## Manual run (without CI/CD)
 
 ```bash
 cd frontend && npm ci && npm run build && cd ..
@@ -111,7 +110,7 @@ Open `http://<orange_pi_ip>:8000` and click **Connect**.
 
 ---
 
-## 🔧 Notes
+## Notes
 
 - Camera index is set via the `CAMERA_INDEX` env var in `rover-cam.service` (defaults to `5`, matched to our Logitech C270 on `/dev/video5`). Adjust if your camera enumerates differently — check with `v4l2-ctl --list-devices`.
 - `opencv-python` is intentionally excluded from `requirements.txt` — install `python3-opencv` via `apt` on the Orange Pi instead, to avoid a numpy version conflict with the system package.

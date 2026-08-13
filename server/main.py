@@ -1,13 +1,12 @@
 import asyncio
 import base64
 import os
+from contextlib import asynccontextmanager
+
 import cv2
+import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import uvicorn
-
-app = FastAPI()
 
 CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "5"))
 
@@ -51,9 +50,15 @@ async def broadcast_frames():
 
         await asyncio.sleep(1 / 30)
 
-@app.on_event("startup")
-async def startup():
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     asyncio.create_task(broadcast_frames())
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
 
 @app.websocket("/ws/camera")
 async def camera_ws(websocket: WebSocket):
@@ -62,18 +67,14 @@ async def camera_ws(websocket: WebSocket):
     print(f"Client connected. Total: {len(connected_clients)}")
     try:
         while True:
-            msg = await websocket.receive_text()
-            if msg == "ping":
-                await websocket.send_text("pong")
+            await websocket.receive_text()
     except WebSocketDisconnect:
         connected_clients.remove(websocket)
         print(f"Client disconnected. Total: {len(connected_clients)}")
 
-app.mount("/static", StaticFiles(directory="../static"), name="static")
 
-@app.get("/")
-async def root():
-    return FileResponse("../static/index.html")
+app.mount("/", StaticFiles(directory="../static", html=True), name="static")
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
