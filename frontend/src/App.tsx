@@ -29,6 +29,12 @@ export default function App() {
   const [controlConnected, setControlConnected] = useState(false)
   const [currentCmd, setCurrentCmd] = useState({ left: 0, right: 0 })
 
+  const [mode, setMode] = useState<'manual' | 'auto'>('manual')
+  const [apState, setApState] = useState<string>('IDLE')
+  const [distanceCm, setDistanceCm] = useState<number | null>(null)
+  const [distanceStale, setDistanceStale] = useState(true)
+  const [statusConnected, setStatusConnected] = useState(false)
+
   const wsRef = useRef<WebSocket | null>(null)
   const frameWindowRef = useRef(0)
   const lastFpsTimeRef = useRef(performance.now())
@@ -98,6 +104,51 @@ export default function App() {
     ws.send(JSON.stringify({ left, right, stop }))
     lastSentRef.current = { left, right, stop }
     lastSendTimeRef.current = performance.now()
+  }, [])
+
+  const sendMode = useCallback((next: 'auto' | 'manual') => {
+    const ws = controlWsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      addLog('Cannot switch mode — control channel down', 'err')
+      return
+    }
+    ws.send(JSON.stringify({ mode: next }))
+    addLog(`Requested ${next.toUpperCase()} mode`)
+  }, [addLog])
+
+  useEffect(() => {
+    let cancelled = false
+    let retry: number | undefined
+    let ws: WebSocket | null = null
+
+    const open = () => {
+      if (cancelled) return
+      const url = `ws://${window.location.hostname || 'localhost'}:8000/ws/status`
+      ws = new WebSocket(url)
+      ws.onopen = () => setStatusConnected(true)
+      ws.onmessage = (event) => {
+        try {
+          const s = JSON.parse(event.data)
+          setMode(s.mode)
+          setApState(s.state)
+          setDistanceCm(s.distance_cm)
+          setDistanceStale(!!s.distance_stale)
+        } catch {
+          // ignore malformed
+        }
+      }
+      ws.onclose = () => {
+        setStatusConnected(false)
+        retry = window.setTimeout(open, 2000)
+      }
+    }
+    open()
+
+    return () => {
+      cancelled = true
+      if (retry !== undefined) clearTimeout(retry)
+      ws?.close()
+    }
   }, [])
 
   useEffect(() => {
@@ -214,6 +265,10 @@ export default function App() {
             <div className={`dot ${gamepadName ? 'green' : 'red'}`} />
             <span>{gamepadName ? 'GAMEPAD' : 'NO GAMEPAD'}</span>
           </div>
+          <div className="status-pill">
+            <div className={`dot ${mode === 'auto' ? 'green' : ''}`} />
+            <span>{mode === 'auto' ? 'AUTOPILOT' : 'MANUAL'}</span>
+          </div>
         </div>
       </header>
 
@@ -295,6 +350,38 @@ export default function App() {
             </button>
           </div>
 
+          <div className="panel-section">
+            <div className="section-label">Autopilot</div>
+            {!statusConnected && (
+              <div className="log-err" style={{ marginBottom: 8 }}>
+                ⚠ Status channel down.
+              </div>
+            )}
+            <div className="stat-row">
+              <span className="stat-label">Mode</span>
+              <span className={`stat-value ${mode === 'auto' ? 'green' : ''}`}>
+                {mode.toUpperCase()}
+              </span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-label">State</span>
+              <span className="stat-value">{apState}</span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-label">Distance</span>
+              <span className={`stat-value ${distanceStale ? '' : 'green'}`}>
+                {distanceCm === null ? '— (no reading)' : `${distanceCm.toFixed(1)} cm`}
+              </span>
+            </div>
+            <button
+              className={`connect-btn ${mode === 'auto' ? 'disconnect' : ''}`}
+              onClick={() => sendMode(mode === 'auto' ? 'manual' : 'auto')}
+              style={{ marginTop: 8 }}
+            >
+              {mode === 'auto' ? 'Switch to Manual' : 'Switch to Autopilot'}
+            </button>
+          </div>
+
           <div className="panel-section log-flex">
             <div className="section-label">System Log</div>
             <div className="log-area" ref={logsRef}>
@@ -309,7 +396,7 @@ export default function App() {
 
         <div className="bottom-bar">
           <span className="bottom-info">
-            ROVER VISION SYSTEM v0.2 — CAMERA + GAMEPAD CONTROL
+            ROVER VISION SYSTEM v0.3 — MANUAL + AUTOPILOT
           </span>
           <span className="resolution-badge">640 × 480</span>
         </div>
