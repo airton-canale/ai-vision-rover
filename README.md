@@ -173,8 +173,103 @@ python3 motor_control.py teste
 
 ---
 
+## Autopilot (HC-SR04 obstacle avoidance)
+
+> ⚠ **Supervised only.** The rover has one forward-facing sensor and no drop-off
+> detection. Never leave autopilot running unattended. A human watches the
+> camera and can drop to Manual at any time — any gamepad input or the toggle
+> button switches modes.
+
+### Wiring the HC-SR04
+
+| HC-SR04 | Orange Pi 4 LTS (physical pin) |
+|---|---|
+| VCC | 5V (pin 2 or 4) |
+| GND | GND (pin 6) |
+| Trig | pin **12** |
+| Echo | pin **16** — **via voltage divider** ⚠ |
+
+**⚠ Voltage divider on Echo is mandatory.** Echo drives 5V; the Orange Pi's
+GPIO is 3.3V and **not 5V-tolerant**. Wiring Echo direct to pin 16 will damage
+the SoC.
+
+```
+Echo ──┬── 1kΩ ──┬── pin 16 (GPIO)
+                 │
+                2kΩ
+                 │
+                GND
+```
+
+Verify pin assignments against `gpio readall` on the Pi before wiring — motor
+pins are 11/13/15/22, do not reuse them.
+
+### Why not use the `gpio` subprocess for the sensor
+
+The motor driver shells out to wiringOP (`gpio -1 write`). Each shell takes
+5-15 ms. HC-SR04 echo pulses are 150 µs to 25 ms wide — subprocess adds
+100-1000× too much jitter to time them. The sensor driver uses `OPi.GPIO`
+directly (pure Python, aarch64-compatible). The motor driver is unchanged.
+
+### Autopilot behaviour
+
+State machine in `server/autopilot.py`:
+
+| State | Trigger / action |
+|---|---|
+| **CRUISE** | Drive forward while distance > `CLEAR_DISTANCE_CM` (50) |
+| **OBSTACLE** | Distance < `STOP_DISTANCE_CM` (25) → stop, brief pause |
+| **BACKUP** | Reverse for `BACKUP_DURATION_S` (0.5 s) |
+| **TURN** | Rotate in place for `TURN_DURATION_S` (0.4 s), alternating L/R |
+| **STUCK** | After `MAX_TURN_ATTEMPTS` (4) failed turns → stop and report |
+
+Sensor reads take 5 samples, drop outliers via median, and never trust a single
+reading. Timeouts return "no reading" (not 0 cm) so an absorbent surface doesn't
+freeze the rover.
+
+### Mode switching
+
+- **Server-authoritative.** The current mode is broadcast to all `/ws/status`
+  clients so two tabs cannot disagree.
+- **Autopilot ↔ Manual toggle** in the UI header + Autopilot panel.
+- **Any manual command overrides** — moving the stick in autopilot drops to
+  Manual immediately.
+- **Emergency stop works in both modes** and forces Manual.
+- Switching stops the motors first, then hands over.
+- If **all clients disconnect while in autopilot**, the server stops the motors
+  and exits autopilot (nobody is watching).
+
+### Known blind spots — documented, not solved
+
+- Cone ~15°, range ~2 cm to 4 m.
+- **Cannot detect drop-offs** (stairs, table edges). Autopilot on a table drives
+  off.
+- Soft or angled surfaces absorb / deflect the ping — sensor reports "clear"
+  when there's actually a wall.
+- Only faces forward. Nothing is known about sides or rear while reversing.
+
+### Testing without hardware
+
+```bash
+cd server
+
+# unit checks
+MOCK_GPIO=1 python3 motor_control.py check
+python3 sensors.py check
+MOCK_GPIO=1 python3 autopilot.py check
+
+# full stack, scripted distances cycling
+MOCK_GPIO=1 MOCK_DISTANCES=100,80,50,25,10,-1,50,100 python3 main.py
+```
+
+`MOCK_DISTANCES` values are in cm; `-1` simulates a sensor timeout. The list
+cycles per sample, so the state machine will walk CRUISE → OBSTACLE → BACKUP →
+TURN → CRUISE as the distance drops and recovers.
+
+---
+
 ## Notes
 
 - Camera index is set via the `CAMERA_INDEX` env var in `rover-cam.service` (defaults to `5`, matched to our Logitech C270 on `/dev/video5`). Adjust if your camera enumerates differently — check with `v4l2-ctl --list-devices`.
 - `opencv-python` is intentionally excluded from `requirements.txt` — install `python3-opencv` via `apt` on the Orange Pi instead, to avoid a numpy version conflict with the system package.
-- No new Python deps for gamepad control — FastAPI already provides WebSocket support and `motor_control.py` uses stdlib `subprocess`.
+- `OPi.GPIO` is aarch64-compatible pure Python (no wheel build required).
