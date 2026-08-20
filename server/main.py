@@ -71,7 +71,7 @@ async def _switch_to_manual():
     if autopilot.running():
         await autopilot.stop()
     mode = "manual"
-    motor_control.parar()
+    motor_control.stop()
 
 
 async def _switch_to_auto():
@@ -88,7 +88,7 @@ async def control_watchdog():
         if active_control_ws is None:
             continue
         if time.monotonic() - last_cmd_time > CONTROL_TIMEOUT:
-            motor_control.parar()
+            motor_control.stop()
 
 
 async def status_broadcaster():
@@ -124,7 +124,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await autopilot.stop()
-        motor_control.parar()
+        motor_control.stop()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -153,7 +153,7 @@ async def control_ws(websocket: WebSocket):
             await active_control_ws.close(code=1000, reason="displaced by new controller")
         except Exception:
             pass
-        motor_control.parar()
+        motor_control.stop()
 
     active_control_ws = websocket
     last_cmd_time = time.monotonic()
@@ -198,7 +198,7 @@ async def control_ws(websocket: WebSocket):
     except Exception as e:
         print(f"Control error: {e}")
     finally:
-        motor_control.parar()
+        motor_control.stop()
         if active_control_ws is websocket:
             active_control_ws = None
         print("Control client disconnected")

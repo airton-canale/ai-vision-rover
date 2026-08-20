@@ -57,7 +57,7 @@ class Autopilot:
                 pass
         self._task = None
         self.state = State.IDLE
-        motor_control.parar()
+        motor_control.stop()
 
     async def _run(self):
         loop = asyncio.get_running_loop()
@@ -69,7 +69,7 @@ class Autopilot:
                 self._tick(dist, time.monotonic())
                 await asyncio.sleep(LOOP_INTERVAL_S)
         finally:
-            motor_control.parar()
+            motor_control.stop()
 
     def _tick(self, dist: float | None, now: float):
         s = self.state
@@ -77,7 +77,7 @@ class Autopilot:
 
         if s == State.CRUISE:
             if dist is not None and dist < STOP_DISTANCE_CM:
-                motor_control.parar()
+                motor_control.stop()
                 self._enter(State.OBSTACLE, now)
             else:
                 motor_control.set_speeds(1.0, 1.0)
@@ -97,7 +97,7 @@ class Autopilot:
 
         elif s == State.TURN:
             if elapsed >= TURN_DURATION_S:
-                motor_control.parar()
+                motor_control.stop()
                 if dist is not None and dist > CLEAR_DISTANCE_CM:
                     self._turn_attempts = 0
                     self._enter(State.CRUISE, now)
@@ -110,7 +110,7 @@ class Autopilot:
                         self._enter(State.OBSTACLE, now)
 
         elif s == State.STUCK:
-            motor_control.parar()
+            motor_control.stop()
 
     def _enter(self, new_state: State, now: float):
         self.state = new_state

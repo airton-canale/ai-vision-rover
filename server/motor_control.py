@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-Controle de motores - AI Vision Rover
-Usa o wiringOP (comando 'gpio') para controlar o L298N via GPIO da Orange Pi.
+Motor control - AI Vision Rover
+Uses wiringOP (`gpio` command) to drive the L298N via Orange Pi GPIO.
 
-Pinagem (pinos físicos confirmados no gpio readall):
-    IN1 -> Pino 11  (motores ESQUERDA)
-    IN2 -> Pino 13  (motores ESQUERDA)
-    IN3 -> Pino 15  (motores DIREITA)
-    IN4 -> Pino 22  (motores DIREITA)
+Pinout (physical pins confirmed via `gpio readall`):
+    IN1 -> Pin 11  (LEFT motors)
+    IN2 -> Pin 13  (LEFT motors)
+    IN3 -> Pin 15  (RIGHT motors)
+    IN4 -> Pin 22  (RIGHT motors)
 
-Lógica H-bridge por lado:
-    Lado ESQUERDO:  IN1=1,IN2=0 -> frente | IN1=0,IN2=1 -> ré | IN1=0,IN2=0 -> parado
-    Lado DIREITO:   IN3=1,IN4=0 -> frente | IN3=0,IN4=1 -> ré | IN3=0,IN4=0 -> parado
+Per-side H-bridge logic:
+    LEFT side:   IN1=1,IN2=0 -> forward | IN1=0,IN2=1 -> reverse | IN1=0,IN2=0 -> stop
+    RIGHT side:  IN3=1,IN4=0 -> forward | IN3=0,IN4=1 -> reverse | IN3=0,IN4=0 -> stop
 
-Se um lado girar ao contrário do esperado, inverta o par de fios daquele lado
-no L298N (troca física) OU inverta a lógica 0/1 nas funções abaixo.
+If a side spins opposite to expected, swap that side's wire pair on the L298N
+(physical swap) OR invert the 0/1 logic in the functions below.
 
 MOCK_GPIO=1 → logs pin writes instead of executing (dev on laptop without wiringOP).
 """
@@ -24,12 +24,12 @@ import subprocess
 import sys
 import time
 
-IN1 = 11  # esquerda
-IN2 = 13  # esquerda
-IN3 = 15  # direita
-IN4 = 22  # direita
+IN1 = 11  # left
+IN2 = 13  # left
+IN3 = 15  # right
+IN4 = 22  # right
 
-TODOS_PINOS = [IN1, IN2, IN3, IN4]
+ALL_PINS = [IN1, IN2, IN3, IN4]
 
 # ENA/ENB jumpered HIGH on the HW-095 → digital-only bang-bang control.
 # Anything above THRESHOLD magnitude drives full speed, below stops.
@@ -55,56 +55,56 @@ def _write(pin: int, value: int):
 
 
 def setup():
-    """Configura todos os pinos como saída e garante que começam desligados."""
-    for pino in TODOS_PINOS:
-        _gpio("mode", pino, "out")
-        _gpio("write", pino, 0)
-        _pin_state[pino] = 0
+    """Configure all pins as output and ensure they start LOW."""
+    for pin in ALL_PINS:
+        _gpio("mode", pin, "out")
+        _gpio("write", pin, 0)
+        _pin_state[pin] = 0
 
 
-def parar():
+def stop():
     _write(IN1, 0)
     _write(IN2, 0)
     _write(IN3, 0)
     _write(IN4, 0)
 
 
-def frente():
+def forward():
     _write(IN1, 1)
     _write(IN2, 0)
     _write(IN3, 1)
     _write(IN4, 0)
 
 
-def re():
+def reverse():
     _write(IN1, 0)
     _write(IN2, 1)
     _write(IN3, 0)
     _write(IN4, 1)
 
 
-def girar_esquerda():
+def turn_left():
     _write(IN1, 0)
     _write(IN2, 1)
     _write(IN3, 1)
     _write(IN4, 0)
 
 
-def girar_direita():
+def turn_right():
     _write(IN1, 1)
     _write(IN2, 0)
     _write(IN3, 0)
     _write(IN4, 1)
 
 
-def curva_suave_esquerda():
+def soft_left():
     _write(IN1, 0)
     _write(IN2, 0)
     _write(IN3, 1)
     _write(IN4, 0)
 
 
-def curva_suave_direita():
+def soft_right():
     _write(IN1, 1)
     _write(IN2, 0)
     _write(IN3, 0)
@@ -133,25 +133,25 @@ def set_speeds(left: float, right: float):
     _apply_side(right, IN3, IN4)
 
 
-def testar_sequencia():
-    testes = [
-        ("FRENTE", frente),
-        ("PARAR", parar),
-        ("RÉ", re),
-        ("PARAR", parar),
-        ("GIRAR ESQUERDA", girar_esquerda),
-        ("PARAR", parar),
-        ("GIRAR DIREITA", girar_direita),
-        ("PARAR", parar),
+def test_sequence():
+    steps = [
+        ("FORWARD", forward),
+        ("STOP", stop),
+        ("REVERSE", reverse),
+        ("STOP", stop),
+        ("TURN LEFT", turn_left),
+        ("STOP", stop),
+        ("TURN RIGHT", turn_right),
+        ("STOP", stop),
     ]
 
-    for nome, funcao in testes:
-        print(f"→ {nome}")
-        funcao()
+    for name, action in steps:
+        print(f"→ {name}")
+        action()
         time.sleep(1.5)
 
-    parar()
-    print("Teste concluído. Motores parados.")
+    stop()
+    print("Test complete. Motors stopped.")
 
 
 def _self_check():
@@ -183,17 +183,17 @@ if __name__ == "__main__":
 
     setup()
     try:
-        if len(sys.argv) > 1 and sys.argv[1] == "teste":
-            testar_sequencia()
+        if len(sys.argv) > 1 and sys.argv[1] == "test":
+            test_sequence()
         else:
-            print("Uso:")
-            print("  python3 motor_control.py teste   # sequência de teste (hardware)")
-            print("  MOCK_GPIO=1 python3 motor_control.py teste   # sem hardware")
-            print("  python3 motor_control.py check   # asserts (sem hardware)")
+            print("Usage:")
+            print("  python3 motor_control.py test    # test sequence (hardware)")
+            print("  MOCK_GPIO=1 python3 motor_control.py test    # no hardware")
+            print("  python3 motor_control.py check   # asserts (no hardware)")
             print()
-            print("Ou importe as funções em outro script:")
-            print("  from motor_control import frente, re, parar, set_speeds")
+            print("Or import the functions in another script:")
+            print("  from motor_control import forward, reverse, stop, set_speeds")
     except KeyboardInterrupt:
-        print("\nInterrompido pelo usuário.")
+        print("\nInterrupted by user.")
     finally:
-        parar()
+        stop()
