@@ -11,6 +11,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 import motor_control
+import sensors
 from autopilot import autopilot
 
 CAMERA_INDEX = int(os.environ.get("CAMERA_INDEX", "5"))
@@ -125,6 +126,7 @@ async def lifespan(app: FastAPI):
     finally:
         await autopilot.stop()
         motor_control.parar()
+        sensors.cleanup()
 
 
 app = FastAPI(lifespan=lifespan)
