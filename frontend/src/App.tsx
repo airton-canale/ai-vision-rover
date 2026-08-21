@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import GamepadVisualizer from './GamepadVisualizer'
 
 type LogEntry = { time: string; msg: string; type: 'info' | 'ok' | 'err' }
 
@@ -348,6 +349,9 @@ export default function App() {
             >
               Emergency Stop
             </button>
+            <div style={{ marginTop: 12 }}>
+              <GamepadVisualizer />
+            </div>
           </div>
 
           <div className="panel-section">
