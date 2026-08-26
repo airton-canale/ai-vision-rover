@@ -32,6 +32,26 @@ def _load_mock_seq() -> list[float]:
     return _mock_seq
 
 
+def _setup_pin(GPIO, pin: int, direction, initial=None):
+    """Retry once with cleanup(pin) if the sysfs export is stale from a prior crash.
+    Bare `except`: OPi.GPIO wraps EBUSY as its own error, and the recovery path is
+    the same regardless of failure reason — clear the pin and try again."""
+    for attempt in range(2):
+        try:
+            if initial is None:
+                GPIO.setup(pin, direction)
+            else:
+                GPIO.setup(pin, direction, initial=initial)
+            return
+        except Exception:
+            if attempt == 1:
+                raise
+            try:
+                GPIO.cleanup(pin)
+            except Exception:
+                pass
+
+
 def _init_gpio():
     global _gpio, _gpio_ready
     if _gpio_ready:
@@ -42,10 +62,23 @@ def _init_gpio():
     import OPi.GPIO as GPIO
     GPIO.setmode(GPIO.BOARD)
     GPIO.setwarnings(False)
-    GPIO.setup(TRIG_PIN, GPIO.OUT, initial=GPIO.LOW)
-    GPIO.setup(ECHO_PIN, GPIO.IN)
+    _setup_pin(GPIO, TRIG_PIN, GPIO.OUT, initial=GPIO.LOW)
+    _setup_pin(GPIO, ECHO_PIN, GPIO.IN)
     _gpio = GPIO
     _gpio_ready = True
+
+
+def cleanup():
+    """Release sysfs exports. Call on shutdown so next start doesn't hit EBUSY."""
+    global _gpio, _gpio_ready
+    if _gpio is None:
+        return
+    try:
+        _gpio.cleanup()
+    except Exception:
+        pass
+    _gpio = None
+    _gpio_ready = False
 
 
 def _measure_once() -> float | None:
