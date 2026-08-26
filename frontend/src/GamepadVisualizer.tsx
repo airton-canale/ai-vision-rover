@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
 const STICK_RADIUS = 22   // travel radius of the knob inside its base
-const TRIGGER_MAX = 40    // px height fill for full trigger pull
+const TRIGGER_MAX = 20    // px height fill for full trigger pull
+const STICK_ACTIVE = 0.15 // matches app deadzone — highlight when the user is actually pushing
 
 type State = {
   connected: boolean
@@ -64,27 +65,29 @@ export default function GamepadVisualizer() {
       <rect x="20" y="60" width="260" height="120" rx="60" ry="60"
         fill="none" stroke={STROKE} strokeWidth="1.5" opacity="0.7" />
 
-      <rect x="70" y="40" width="30" height="30" rx="8" fill="none" stroke={s.l1 ? ON : STROKE} strokeWidth="2" />
-      <text x="85" y="60" textAnchor="middle" fontSize="10" fill={s.l1 ? ON : '#8a94a8'}>L1</text>
-      <rect x="200" y="40" width="30" height="30" rx="8" fill="none" stroke={s.r1 ? ON : STROKE} strokeWidth="2" />
-      <text x="215" y="60" textAnchor="middle" fontSize="10" fill={s.r1 ? ON : '#8a94a8'}>R1</text>
+      <rect x="60" y="4" width="50" height={TRIGGER_MAX} rx="4" fill="none" stroke={STROKE} strokeWidth="1" />
+      <rect x="60" y={4 + TRIGGER_MAX - TRIGGER_MAX * s.l2} width="50" height={TRIGGER_MAX * s.l2}
+        rx="4" fill={ON} opacity="0.6" />
+      <text x="85" y="18" textAnchor="middle" fontSize="9" fill={s.l2 > 0 ? ON : '#8a94a8'}>L2</text>
+      <rect x="190" y="4" width="50" height={TRIGGER_MAX} rx="4" fill="none" stroke={STROKE} strokeWidth="1" />
+      <rect x="190" y={4 + TRIGGER_MAX - TRIGGER_MAX * s.r2} width="50" height={TRIGGER_MAX * s.r2}
+        rx="4" fill={ON} opacity="0.6" />
+      <text x="215" y="18" textAnchor="middle" fontSize="9" fill={s.r2 > 0 ? ON : '#8a94a8'}>R2</text>
 
-      <rect x="72" y="8" width="26" height={TRIGGER_MAX} rx="4" fill="none" stroke={STROKE} strokeWidth="1" />
-      <rect x="72" y={8 + TRIGGER_MAX - TRIGGER_MAX * s.l2} width="26" height={TRIGGER_MAX * s.l2}
-        rx="4" fill={ON} opacity="0.6" />
-      <text x="85" y="55" textAnchor="middle" fontSize="9" fill="#8a94a8">L2</text>
-      <rect x="202" y="8" width="26" height={TRIGGER_MAX} rx="4" fill="none" stroke={STROKE} strokeWidth="1" />
-      <rect x="202" y={8 + TRIGGER_MAX - TRIGGER_MAX * s.r2} width="26" height={TRIGGER_MAX * s.r2}
-        rx="4" fill={ON} opacity="0.6" />
-      <text x="215" y="55" textAnchor="middle" fontSize="9" fill="#8a94a8">R2</text>
+      <rect x="60" y="30" width="50" height="20" rx="6" fill={s.l1 ? ON : 'none'} stroke={s.l1 ? ON : STROKE} strokeWidth="2" opacity={s.l1 ? 0.6 : 1} />
+      <text x="85" y="44" textAnchor="middle" fontSize="10" fill={s.l1 ? '#000' : '#8a94a8'}>L1</text>
+      <rect x="190" y="30" width="50" height="20" rx="6" fill={s.r1 ? ON : 'none'} stroke={s.r1 ? ON : STROKE} strokeWidth="2" opacity={s.r1 ? 0.6 : 1} />
+      <text x="215" y="44" textAnchor="middle" fontSize="10" fill={s.r1 ? '#000' : '#8a94a8'}>R1</text>
 
       <circle cx="85" cy="130" r="28" fill="none" stroke={STROKE} strokeWidth="1.5" />
       <circle cx={85 + s.lx * STICK_RADIUS} cy={130 + s.ly * STICK_RADIUS} r="14"
-        fill={s.l3 ? ON : OFF} stroke={STROKE} strokeWidth="1.5" />
+        fill={s.l3 || Math.abs(s.lx) > STICK_ACTIVE || Math.abs(s.ly) > STICK_ACTIVE ? ON : OFF}
+        stroke={STROKE} strokeWidth="1.5" />
 
       <circle cx="215" cy="130" r="28" fill="none" stroke={STROKE} strokeWidth="1.5" />
       <circle cx={215 + s.rx * STICK_RADIUS} cy={130 + s.ry * STICK_RADIUS} r="14"
-        fill={s.r3 ? ON : OFF} stroke={STROKE} strokeWidth="1.5" />
+        fill={s.r3 || Math.abs(s.rx) > STICK_ACTIVE || Math.abs(s.ry) > STICK_ACTIVE ? ON : OFF}
+        stroke={STROKE} strokeWidth="1.5" />
 
       <g transform="translate(150 130)">
         <rect x="-8" y="-24" width="16" height="16" fill={dpad(s.up)} stroke={STROKE} />

@@ -161,14 +161,24 @@ export default function App() {
 
     const openControl = () => {
       if (cancelled) return
+      if (reconnectTimer !== undefined) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = undefined
+      }
+      const existing = controlWsRef.current
+      if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+        return
+      }
       const url = `ws://${window.location.hostname || 'localhost'}:8000/ws/control`
       const ws = new WebSocket(url)
       controlWsRef.current = ws
       ws.onopen = () => {
+        if (controlWsRef.current !== ws) return
         setControlConnected(true)
         addLog('Control channel connected', 'ok')
       }
       ws.onclose = () => {
+        if (controlWsRef.current !== ws) return
         setControlConnected(false)
         controlWsRef.current = null
         addLog('Control channel closed — retrying in 2s', 'err')
