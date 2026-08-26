@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import ObjectDetector from './ObjectDetector'
 import GamepadVisualizer from './GamepadVisualizer'
 
 type LogEntry = { time: string; msg: string; type: 'info' | 'ok' | 'err' }
@@ -35,7 +36,9 @@ export default function App() {
   const [distanceCm, setDistanceCm] = useState<number | null>(null)
   const [distanceStale, setDistanceStale] = useState(true)
   const [statusConnected, setStatusConnected] = useState(false)
+  const [aiEnabled, setAiEnabled] = useState(false)
 
+  const imgRef = useRef<HTMLImageElement | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const frameWindowRef = useRef(0)
   const lastFpsTimeRef = useRef(performance.now())
@@ -282,7 +285,10 @@ export default function App() {
           <div className="camera-corner br" />
           <div className="scanlines" />
           {frameSrc ? (
-            <img className="camera-feed" src={frameSrc} alt="camera feed" />
+            <>
+              <img ref={imgRef} className="camera-feed" src={frameSrc} alt="camera feed" />
+              <ObjectDetector imgRef={imgRef} enabled={aiEnabled && connected} />
+            </>
           ) : (
             <div className="no-signal">
               <div className="no-signal-icon">📷</div>
@@ -320,6 +326,13 @@ export default function App() {
               <span className="stat-label">Frames recv.</span>
               <span className="stat-value">{frameTotal}</span>
             </div>
+            <button
+              className={`connect-btn ${aiEnabled ? 'disconnect' : ''}`}
+              onClick={() => setAiEnabled((v) => !v)}
+              style={{ marginTop: 8 }}
+            >
+              {aiEnabled ? 'AI Detection: ON' : 'AI Detection: OFF'}
+            </button>
           </div>
 
           <div className="panel-section">
