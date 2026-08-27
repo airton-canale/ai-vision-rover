@@ -3,6 +3,7 @@ import base64
 import json
 import os
 import time
+import traceback
 from contextlib import asynccontextmanager
 
 import cv2
@@ -166,39 +167,44 @@ async def control_ws(websocket: WebSocket):
             raw = await websocket.receive_text()
             try:
                 msg = json.loads(raw)
+
+                # Emergency stop — always wins, forces manual.
+                if msg.get("stop"):
+                    await _switch_to_manual()
+                    last_cmd_time = time.monotonic()
+                    continue
+
+                requested_mode = msg.get("mode")
+                if requested_mode == "auto":
+                    await _switch_to_auto()
+                    last_cmd_time = time.monotonic()
+                    continue
+                if requested_mode == "manual":
+                    await _switch_to_manual()
+                    last_cmd_time = time.monotonic()
+                    continue
+
+                left = max(-1.0, min(1.0, float(msg.get("left", 0))))
+                right = max(-1.0, min(1.0, float(msg.get("right", 0))))
+
+                # Manual override: any real drive input while in auto flips to manual.
+                if mode == "auto" and (abs(left) > MANUAL_INPUT_EPSILON or abs(right) > MANUAL_INPUT_EPSILON):
+                    await _switch_to_manual()
+
+                if mode == "manual":
+                    motor_control.set_speeds(left, right)
+                    last_cmd_time = time.monotonic()
             except json.JSONDecodeError:
                 continue
-
-            # Emergency stop — always wins, forces manual.
-            if msg.get("stop"):
-                await _switch_to_manual()
-                last_cmd_time = time.monotonic()
+            except Exception:
+                # Swallow per-message errors so one bad frame doesn't tear down
+                # the whole control channel (previously caused reconnect storms).
+                print(f"Control message handling error:\n{traceback.format_exc()}")
                 continue
-
-            requested_mode = msg.get("mode")
-            if requested_mode == "auto":
-                await _switch_to_auto()
-                last_cmd_time = time.monotonic()
-                continue
-            if requested_mode == "manual":
-                await _switch_to_manual()
-                last_cmd_time = time.monotonic()
-                continue
-
-            left = max(-1.0, min(1.0, float(msg.get("left", 0))))
-            right = max(-1.0, min(1.0, float(msg.get("right", 0))))
-
-            # Manual override: any real drive input while in auto flips to manual.
-            if mode == "auto" and (abs(left) > MANUAL_INPUT_EPSILON or abs(right) > MANUAL_INPUT_EPSILON):
-                await _switch_to_manual()
-
-            if mode == "manual":
-                motor_control.set_speeds(left, right)
-                last_cmd_time = time.monotonic()
     except WebSocketDisconnect:
         pass
-    except Exception as e:
-        print(f"Control error: {e}")
+    except Exception:
+        print(f"Control socket error:\n{traceback.format_exc()}")
     finally:
         motor_control.stop()
         if active_control_ws is websocket:

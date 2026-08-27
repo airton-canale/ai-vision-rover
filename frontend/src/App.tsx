@@ -177,11 +177,11 @@ export default function App() {
         setControlConnected(true)
         addLog('Control channel connected', 'ok')
       }
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         if (controlWsRef.current !== ws) return
         setControlConnected(false)
         controlWsRef.current = null
-        addLog('Control channel closed — retrying in 2s', 'err')
+        addLog(`Control closed (code=${ev.code}${ev.reason ? ` reason="${ev.reason}"` : ''}) — retry 2s`, 'err')
         reconnectTimer = window.setTimeout(openControl, 2000)
       }
     }
